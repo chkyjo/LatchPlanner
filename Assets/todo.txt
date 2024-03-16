@@ -1,0 +1,9 @@
+Feature: Add rows and columns - Done
+Feature: Row and column counts - Done
+Possible autosave - Done
+Select resolution on photo upload - Done
+Add photo upload preview - Done
+Row progress highlighting - Done
+Progress saving - Done
+Arrow keys to progress - Done
+Project name editing
