@@ -1,11 +1,12 @@
 using System;
-using System.Collections;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using static ActionHistory;
 
-public class TextureController : MonoBehaviour{
+public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler{
 
     public static Action textureUpdated;
     public static Action latchFinished;
@@ -43,7 +44,6 @@ public class TextureController : MonoBehaviour{
     [SerializeField] Button zoomButton;
     [SerializeField] Button zoomOutButton;
     [SerializeField] Button fillToolButton;
-    [SerializeField] Texture2D fillCursor;
 
     [SerializeField] RectTransform rowHighlighter;
     [SerializeField] RectTransform columnHighlighter;
@@ -52,19 +52,24 @@ public class TextureController : MonoBehaviour{
     Color highlightedColor = new Color(0, 0, 0, 0);
     Color notHighlightedColor = new Color(0, 0, 0, .7f);
     int currentStep = 0;
-    bool latchMode = false;
 
     int topAndLeftPadding = 30;
 
     RectTransform rT;
 
+    [SerializeField] Texture2D defaultCursor;
     [SerializeField] Texture2D dragCursor;
-    [SerializeField] Texture2D standardCursor;
-
-    float fillSpeed = 0.01f; //time per pixel
-    int numFillRoutines = 0; //used to determine when a fill is completed
+    [SerializeField] Texture2D paintCursor;
+    [SerializeField] Texture2D fillCursor;
 
     CanvasMode canvasMode;
+
+    Color unselectedToolColor = new Color(0.7f, 0.7f, 0.7f);
+    Color selectedToolColor = new Color(0.5f, 0.5f, 0.5f);
+    Image selectedTool;
+    Texture2D currentCursor;
+
+    ActionHistory history;
 
     void Awake() {
 
@@ -84,6 +89,11 @@ public class TextureController : MonoBehaviour{
         zoomOutButton.onClick.AddListener(OnZoomOutButton);
         fillToolButton.onClick.AddListener(OnFillToolButton);
         paintButton.onClick.AddListener(OnPaintButton);
+
+        selectedTool = paintButton.transform.parent.GetComponent<Image>();
+        currentCursor = paintCursor;
+
+        history = new ActionHistory();
     }
 
     void Start() {
@@ -127,6 +137,41 @@ public class TextureController : MonoBehaviour{
             }
             scrollableArea.localScale -= new Vector3(0.1f, 0.1f, 0.1f);
         }
+
+        if (Input.GetKey(KeyCode.LeftShift)) {
+            if (Input.GetKey(KeyCode.LeftControl) && Input.GetKeyDown(KeyCode.Z)) {
+                Redo();
+            }
+        }
+        else {
+            if (Input.GetKey(KeyCode.LeftControl) && Input.GetKeyDown(KeyCode.Z)) {
+                Undo();
+            }
+        }
+
+    }
+
+    void Undo() {
+        HistoryAction action = history.GetCurrentAction();
+        foreach(Vector2Int pixel in action.pixels) {
+            texture.SetPixel(pixel.x, pixel.y, action.fromColor);
+        }
+        texture.Apply();
+
+        history.Undo();
+    }
+
+    void Redo() {
+        if (history.AtTop()) {
+            return;
+        }
+        HistoryAction action = history.GetNextAction();
+        foreach (Vector2Int pixel in action.pixels) {
+            texture.SetPixel(pixel.x, pixel.y, action.toColor);
+        }
+        texture.Apply();
+
+        history.Redo();
     }
 
     public void NewBlankProject(int width, int height, Color baseColor) {
@@ -197,6 +242,7 @@ public class TextureController : MonoBehaviour{
 
     void ColorSelected(Color col) {
         currentColor = col;
+        paintButton.GetComponent<Image>().color = currentColor;
     }
 
     public void SetResolution(int width, int height) {
@@ -206,6 +252,7 @@ public class TextureController : MonoBehaviour{
 
     public void SetColor(Color color) {
         currentColor = color;
+        paintButton.GetComponent<Image>().color = currentColor;
     }
 
     public void CreateNewGrid(Color color) {
@@ -460,16 +507,42 @@ public class TextureController : MonoBehaviour{
 
     void OnPaintButton() {
         canvasMode = CanvasMode.paintMode;
+        selectedTool.color = unselectedToolColor;
+        selectedTool = paintButton.transform.parent.GetComponent<Image>();
+        //selectedTool = paintButton.GetComponentInParent<Image>();
+        selectedTool.color = selectedToolColor;
+
         GetComponent<CanvasScroller>().canvasMode = canvasMode;
         paintInterface.gameObject.SetActive(true);
-        Cursor.SetCursor(standardCursor, new Vector2(0, 0), CursorMode.ForceSoftware);
+        paintInterface.fillMode = false;
+        Cursor.SetCursor(paintCursor, new Vector2(0, 0), CursorMode.ForceSoftware);
+        currentCursor = paintCursor;
     }
 
     void OnDragButton() {
         canvasMode = CanvasMode.dragMode;
+        selectedTool.color = unselectedToolColor;
+        selectedTool = dragButton.GetComponent<Image>();
+        selectedTool.color = selectedToolColor;
+
         GetComponent<CanvasScroller>().canvasMode = canvasMode;
         paintInterface.gameObject.SetActive(false);
-        Cursor.SetCursor(dragCursor, new Vector2(32, 32), CursorMode.ForceSoftware);
+        paintInterface.fillMode = false;
+        currentCursor = dragCursor;
+        Cursor.SetCursor(currentCursor, new Vector2(32, 32), CursorMode.ForceSoftware);
+    }
+
+    void OnFillToolButton() {
+        canvasMode = CanvasMode.fillMode;
+        selectedTool.color = unselectedToolColor;
+        selectedTool = fillToolButton.GetComponent<Image>();
+        selectedTool.color = selectedToolColor;
+
+        GetComponent<CanvasScroller>().canvasMode = canvasMode;
+        paintInterface.gameObject.SetActive(true);
+        paintInterface.fillMode = true;
+        Cursor.SetCursor(fillCursor, Vector2.zero, CursorMode.ForceSoftware);
+        currentCursor = fillCursor;
     }
 
     void OnZoomButton() {
@@ -486,13 +559,6 @@ public class TextureController : MonoBehaviour{
         scrollableArea.localScale -= new Vector3(0.1f, 0.1f, 0.1f);
     }
 
-    void OnFillToolButton() {
-        canvasMode = CanvasMode.fillMode;
-        GetComponent<CanvasScroller>().canvasMode = canvasMode;
-        paintInterface.gameObject.SetActive(true);
-        Cursor.SetCursor(fillCursor, Vector2.zero, CursorMode.ForceSoftware);
-    }
-
     void UpdatePixel(PointerEventData eventData) {
         Vector3 pos = rT.InverseTransformPoint(eventData.position);
 
@@ -502,174 +568,85 @@ public class TextureController : MonoBehaviour{
         int pixelX = (int)(pos.x / rT.sizeDelta.x * resolution.x);
         int pixelY = (int)(pos.y / rT.sizeDelta.y * resolution.y);
 
+        Color oldColor = texture.GetPixel(pixelX, pixelY);
+        if (Math.Round(oldColor.r, 2) == Math.Round(currentColor.r, 2)
+            && Math.Round(oldColor.g, 2) == Math.Round(currentColor.g, 2)
+            && Math.Round(oldColor.b, 2) == Math.Round(currentColor.b, 2)) {
+            Debug.Log(Math.Round(oldColor.r, 2).ToString() + "    " + Math.Round(currentColor.r, 2).ToString());
+            return;
+        }
+
         if (canvasMode == CanvasMode.fillMode) {
-            Color oldColor = texture.GetPixel(pixelX, pixelY);
-            if (oldColor == currentColor) {
-                return;
+            List<Vector2Int> pixels = FindPixels(pixelX, pixelY, oldColor);
+            foreach (Vector2Int pixel in pixels) {
+                texture.SetPixel(pixel.x, pixel.y, currentColor);
             }
-            StartCoroutine(FillPixels(pixelX, pixelY, oldColor));
+
+            history.AddAction(pixels.ToArray(), oldColor, currentColor);
         }
         else {
             texture.SetPixel(pixelX, pixelY, currentColor);
-            texture.Apply();
-            textureUpdated?.Invoke();
+            history.AddAction(new Vector2Int[] {new Vector2Int(pixelX, pixelY) }, oldColor, currentColor);
         }
+
+        texture.Apply();
+        textureUpdated?.Invoke();
     }
 
-    IEnumerator FillPixels(int posX, int posY, Color oldColor) {
-        numFillRoutines++;
-        texture.SetPixel(posX, posY, currentColor);
-        texture.Apply();
-        yield return new WaitForSeconds(fillSpeed);
+    List<Vector2Int> FindPixels(int posX, int posY, Color color) {
 
-        if (posX < resolution.x - 1) {
-            if(texture.GetPixel(posX + 1, posY) == oldColor) {
-                StartCoroutine(FillRight(posX + 1, posY, oldColor));
+        int[][] checkedPixels = new int[resolution.x][];
+        for (int x = 0; x < resolution.x; x++) {
+            checkedPixels[x] = new int[resolution.y];
+        }
+
+        List<Vector2Int> pixelsToCheck = new List<Vector2Int> { new Vector2Int(posX, posY) };
+        List<Vector2Int> pixelsToReturn = new List<Vector2Int>();
+
+        do {
+            Vector2Int pixel = pixelsToCheck[0];
+            pixelsToCheck.RemoveAt(0);
+            pixelsToReturn.Add(pixel);
+
+            if (pixel.x < resolution.x - 1) {
+                if (checkedPixels[pixel.x + 1][pixel.y] == 0) { // if unchecked pixel
+                    checkedPixels[pixel.x + 1][pixel.y] = 1;
+                    if (texture.GetPixel(pixel.x + 1, pixel.y) == color) {
+                        pixelsToCheck.Add(new Vector2Int(pixel.x + 1, pixel.y));
+                    }
+                }
             }
-        }
 
-        if(posY > 0) {
-            if (texture.GetPixel(posX, posY - 1) == oldColor) {
-                StartCoroutine(FillDown(posX, posY - 1, oldColor));
+            if (pixel.y > 0) {
+                if (checkedPixels[pixel.x][pixel.y - 1] == 0) { // if unchecked pixel
+                    checkedPixels[pixel.x][pixel.y - 1] = 1;
+                    if (texture.GetPixel(pixel.x, pixel.y - 1) == color) {
+                        pixelsToCheck.Add(new Vector2Int(pixel.x, pixel.y - 1));
+                    }
+                }
             }
-        }
 
-        if(posX > 0) {
-            if (texture.GetPixel(posX - 1, posY) == oldColor) {
-                StartCoroutine(FillLeft(posX - 1, posY, oldColor));
+            if (pixel.x > 0) {
+                if (checkedPixels[pixel.x - 1][pixel.y] == 0) { // if unchecked pixel
+                    checkedPixels[pixel.x - 1][pixel.y] = 1;
+                    if (texture.GetPixel(pixel.x - 1, pixel.y) == color) {
+                        pixelsToCheck.Add(new Vector2Int(pixel.x - 1, pixel.y));
+                    }
+                }
             }
-        }
 
-        if(posY < resolution.y - 1) {
-            if (texture.GetPixel(posX, posY + 1) == oldColor) {
-                StartCoroutine(FillUp(posX, posY + 1, oldColor));
+            if (pixel.y < resolution.y - 1) {
+                if (checkedPixels[pixel.x][pixel.y + 1] == 0) { // if unchecked pixel
+                    checkedPixels[pixel.x][pixel.y + 1] = 1;
+                    if (texture.GetPixel(pixel.x, pixel.y + 1) == color) {
+                        pixelsToCheck.Add(new Vector2Int(pixel.x, pixel.y + 1));
+                    }
+                }
             }
-        }
+        } while (pixelsToCheck.Count > 0);
 
-        numFillRoutines--;
-        if (numFillRoutines == 0) {
-            textureUpdated?.Invoke();
-        }
-    }
+        return pixelsToReturn;
 
-    IEnumerator FillRight(int posX, int posY, Color oldColor) {
-        numFillRoutines++;
-        texture.SetPixel(posX, posY, currentColor);
-        texture.Apply();
-        yield return new WaitForSeconds(fillSpeed);
-
-        if (posX < resolution.x - 1) {
-            if (texture.GetPixel(posX + 1, posY) == oldColor) {
-                StartCoroutine(FillRight(posX + 1, posY, oldColor));
-            }
-        }
-
-        if (posY > 0) {
-            if (texture.GetPixel(posX, posY - 1) == oldColor) {
-                StartCoroutine(FillDown(posX, posY - 1, oldColor));
-            }
-        }
-
-        if (posY < resolution.y - 1) {
-            if (texture.GetPixel(posX, posY + 1) == oldColor) {
-                StartCoroutine(FillUp(posX, posY + 1, oldColor));
-            }
-        }
-
-        numFillRoutines--;
-        if (numFillRoutines == 0) {
-            textureUpdated?.Invoke();
-        }
-    }
-
-    IEnumerator FillDown(int posX, int posY, Color oldColor) {
-        numFillRoutines++;
-        texture.SetPixel(posX, posY, currentColor);
-        texture.Apply();
-        yield return new WaitForSeconds(fillSpeed);
-
-        if (posX < resolution.x - 1) {
-            if (texture.GetPixel(posX + 1, posY) == oldColor) {
-                StartCoroutine(FillRight(posX + 1, posY, oldColor));
-            }
-        }
-
-        if (posY > 0) {
-            if (texture.GetPixel(posX, posY - 1) == oldColor) {
-                StartCoroutine(FillDown(posX, posY - 1, oldColor));
-            }
-        }
-
-        if (posX > 0) {
-            if (texture.GetPixel(posX - 1, posY) == oldColor) {
-                StartCoroutine(FillLeft(posX - 1, posY, oldColor));
-            }
-        }
-
-        numFillRoutines--;
-        if (numFillRoutines == 0) {
-            textureUpdated?.Invoke();
-        }
-    }
-
-    IEnumerator FillLeft(int posX, int posY, Color oldColor) {
-        numFillRoutines++;
-        texture.SetPixel(posX, posY, currentColor);
-        texture.Apply();
-        yield return new WaitForSeconds(fillSpeed);
-
-        if (posY > 0) {
-            if (texture.GetPixel(posX, posY - 1) == oldColor) {
-                StartCoroutine(FillDown(posX, posY - 1, oldColor));
-            }
-        }
-
-        if (posX > 0) {
-            if (texture.GetPixel(posX - 1, posY) == oldColor) {
-                StartCoroutine(FillLeft(posX - 1, posY, oldColor));
-            }
-        }
-
-        if (posY < resolution.y - 1) {
-            if (texture.GetPixel(posX, posY + 1) == oldColor) {
-                StartCoroutine(FillUp(posX, posY + 1, oldColor));
-            }
-        }
-
-        numFillRoutines--;
-        if (numFillRoutines == 0) {
-            textureUpdated?.Invoke();
-        }
-    }
-
-    IEnumerator FillUp(int posX, int posY, Color oldColor) {
-        numFillRoutines++;
-        texture.SetPixel(posX, posY, currentColor);
-        texture.Apply();
-        yield return new WaitForSeconds(fillSpeed);
-
-        if (posX < resolution.x - 1) {
-            if (texture.GetPixel(posX + 1, posY) == oldColor) {
-                StartCoroutine(FillRight(posX + 1, posY, oldColor));
-            }
-        }
-
-        if (posX > 0) {
-            if (texture.GetPixel(posX - 1, posY) == oldColor) {
-                StartCoroutine(FillLeft(posX - 1, posY, oldColor));
-            }
-        }
-
-        if (posY < resolution.y - 1) {
-            if (texture.GetPixel(posX, posY + 1) == oldColor) {
-                StartCoroutine(FillUp(posX, posY + 1, oldColor));
-            }
-        }
-
-        numFillRoutines--;
-        if (numFillRoutines == 0) {
-            textureUpdated?.Invoke();
-        }
     }
 
     public Texture2D GetImage() {
@@ -681,7 +658,6 @@ public class TextureController : MonoBehaviour{
         int pixelSize = (int)rT.rect.height / resolution.y;
         int rowIndex = step;
         Texture2D highlighterTexture = InitHighlighter(mode);
-        latchMode = true;
         paintInterface.gameObject.SetActive(false);
 
         if (mode) {
@@ -710,7 +686,6 @@ public class TextureController : MonoBehaviour{
 
         int pixelSize = (int)rT.rect.height / resolution.y;
         Texture2D highlighterTexture = InitHighlighter(mode);
-        latchMode = true;
         paintInterface.gameObject.SetActive(false);
 
         rowHighlighter.gameObject.SetActive(true);
@@ -884,7 +859,6 @@ public class TextureController : MonoBehaviour{
     }
 
     public void StopLatch() {
-        latchMode = false;
         paintInterface.gameObject.SetActive(true);
         rowHighlighter.gameObject.SetActive(false);
         columnHighlighter.gameObject.SetActive(false);
@@ -895,10 +869,75 @@ public class TextureController : MonoBehaviour{
         float distance = scrollableArea.localScale.x * (rT.rect.width / resolution.x);
         scrollableArea.Translate(new Vector3(0, direction * distance, 0));
     }
+
+    public void OnPointerEnter(PointerEventData eventData) {
+        Cursor.SetCursor(currentCursor, Vector2.zero, CursorMode.ForceSoftware);
+    }
+
+    public void OnPointerExit(PointerEventData eventData) {
+        Cursor.SetCursor(defaultCursor, Vector2.zero, CursorMode.ForceSoftware);
+    }
 }
 
 public enum CanvasMode {
     paintMode,
     dragMode,
     fillMode
+}
+
+public class ActionHistory {
+    public struct HistoryAction {
+        public Vector2Int[] pixels;
+        public Color fromColor, toColor;
+
+        public HistoryAction(Vector2Int[] pixels, Color from, Color to) {
+            this.pixels = pixels;
+            fromColor = from;
+            toColor = to;
+        }
+    }
+
+    List<HistoryAction> history = new List<HistoryAction>();
+    int currentAction = 0;
+
+    public void AddAction(Vector2Int[] pixels, Color fromColor, Color toColor) {
+        //if current action is not the last action in history
+        for(int i = history.Count - 1; i > currentAction; i--) {
+            history.RemoveAt(i);
+        }
+
+        if(history.Count > 50) {
+            history.RemoveAt(0);
+        }
+
+        history.Add(new HistoryAction(pixels, fromColor, toColor));
+
+        if(history.Count > 1) {
+            currentAction++;
+        }
+    }
+
+    public HistoryAction GetCurrentAction() {
+        return history[currentAction];
+    }
+
+    public HistoryAction GetNextAction() {
+        return history[currentAction + 1];
+    }
+
+    public bool AtTop() {
+        return currentAction == history.Count - 1;
+    }
+
+    public void Undo() {
+        if(currentAction > 0) {
+            currentAction--;
+        }
+    }
+
+    public void Redo() {
+        if (currentAction < history.Count - 1) {
+            currentAction++;
+        }
+    }
 }

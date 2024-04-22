@@ -53,6 +53,7 @@ public class MenuController : MonoBehaviour{
     string loadedProject = "";
 
     UserSettings userSettings;
+    ProjectSettings projectSettings;
 
     private void Awake() {
         newProjectButton.onClick.AddListener(OnPlusButton);
@@ -73,7 +74,6 @@ public class MenuController : MonoBehaviour{
         colorHistory = new List<Color>();
         paletteColors = new List<Color>();
 
-        initialScreen.SetActive(true);
     }
 
     private void OnEnable() {
@@ -97,6 +97,24 @@ public class MenuController : MonoBehaviour{
     private void Start() {
         //System.Diagnostics.Process.Start("explorer.exe", "/select, " + Application.persistentDataPath);
         //System.Diagnostics.Process.Start("open", "-R your-file-path" + Application.persistentDataPath); //for macOS
+        string settingsPath = Application.dataPath + "/UserSettings.txt";
+        if (!File.Exists(settingsPath)) {
+            userSettings = new UserSettings();
+            SaveUserSettings();
+        }
+        else {
+            string settingsText;
+            using (StreamReader settingsFile = File.OpenText(settingsPath)) {
+                settingsText = settingsFile.ReadToEnd();
+            }
+
+            userSettings = JsonUtility.FromJson<UserSettings>(settingsText);
+        }
+
+        if (userSettings.loadedProject != string.Empty) {
+            ProjectLoadConfirmed(userSettings.loadedProject);
+        }
+        Debug.Log(userSettings.loadedProject);
     }
 
     private void Update() {
@@ -165,9 +183,9 @@ public class MenuController : MonoBehaviour{
 
         newProjectWindow.gameObject.SetActive(false);
 
-        userSettings = new UserSettings();
+        projectSettings = new ProjectSettings();
 
-        AddColorToHistory(userSettings.currentColor);
+        AddColorToHistory(projectSettings.currentColor);
 
         SaveProject();
         SaveSettings();
@@ -205,10 +223,10 @@ public class MenuController : MonoBehaviour{
 
         ClearColorHistory();
 
-        userSettings = new UserSettings();
+        projectSettings = new ProjectSettings();
 
-        userSettings.currentColor = currentColorImage.color;
-        AddColorToHistory(userSettings.currentColor);
+        projectSettings.currentColor = currentColorImage.color;
+        AddColorToHistory(projectSettings.currentColor);
 
         paletteColors.Clear();
         paletteController.SetColors(paletteColors);
@@ -221,14 +239,14 @@ public class MenuController : MonoBehaviour{
         AddColorToHistory(color);
 
         currentColorImage.color = color;
-        userSettings.currentColor = color;
+        projectSettings.currentColor = color;
 
         SaveSettings();
     }
 
     void OnHistoryColorSelected(Color color) {
         currentColorImage.color = color;
-        userSettings.currentColor = color;
+        projectSettings.currentColor = color;
 
         SaveSettings();
     }
@@ -246,7 +264,7 @@ public class MenuController : MonoBehaviour{
             disabledColor.SetAsFirstSibling();
         }
         colorHistory.Insert(0, color);
-        userSettings.colorHistory = colorHistory.ToArray();
+        projectSettings.colorHistory = colorHistory.ToArray();
     }
 
     Transform FindDisabledPrevColor() {
@@ -264,6 +282,11 @@ public class MenuController : MonoBehaviour{
     }
 
     public void ProjectLoadConfirmed(string projectName) {
+        if(userSettings.loadedProject != projectName) {
+            userSettings.loadedProject = projectName;
+            SaveUserSettings();
+        }
+
         if (initialScreen.activeInHierarchy) {
             initialScreen.SetActive(false);
         }
@@ -281,7 +304,7 @@ public class MenuController : MonoBehaviour{
 
         string settingsPath = Application.dataPath + "/SavedProjects/" + projectName + ".txt";
         if(!File.Exists(settingsPath)) {
-            userSettings = new UserSettings();
+            projectSettings = new ProjectSettings();
             SaveSettings();
         }
         else {
@@ -290,23 +313,23 @@ public class MenuController : MonoBehaviour{
                 settingsText = settingsFile.ReadToEnd();
             }
 
-            userSettings = JsonUtility.FromJson<UserSettings>(settingsText);
+            projectSettings = JsonUtility.FromJson<ProjectSettings>(settingsText);
         }
 
-        if(userSettings.currentStep > 0) {
+        if(projectSettings.currentStep > 0) {
             startLatchButton.transform.GetChild(0).GetComponent<TMP_Text>().text = "Continue";
-            currentStepDisplay.text = (userSettings.currentStep + 1).ToString();
+            currentStepDisplay.text = (projectSettings.currentStep + 1).ToString();
         }
 
-        currentColorImage.color = userSettings.currentColor;
+        currentColorImage.color = projectSettings.currentColor;
         textureController.SetColor(currentColorImage.color);
 
-        SetColorHistory(userSettings.colorHistory);
+        SetColorHistory(projectSettings.colorHistory);
 
         paletteColors.Clear();
 
-        if(userSettings.paletteColors != null) {
-            paletteColors.AddRange(userSettings.paletteColors);
+        if(projectSettings.paletteColors != null) {
+            paletteColors.AddRange(projectSettings.paletteColors);
         }
 
         paletteController.SetColors(paletteColors);
@@ -315,10 +338,10 @@ public class MenuController : MonoBehaviour{
     void SetColorHistory(Color[] colors) {
         ClearColorHistory();
         if (colors != null) {
-            for (int colorIndex = 0; colorIndex < userSettings.colorHistory.Length; colorIndex++) {
-                colorHistory.Add(userSettings.colorHistory[colorIndex]);
+            for (int colorIndex = 0; colorIndex < projectSettings.colorHistory.Length; colorIndex++) {
+                colorHistory.Add(projectSettings.colorHistory[colorIndex]);
                 prevColors.GetChild(colorIndex).gameObject.SetActive(true);
-                prevColors.GetChild(colorIndex).GetComponent<Image>().color = userSettings.colorHistory[colorIndex];
+                prevColors.GetChild(colorIndex).GetComponent<Image>().color = projectSettings.colorHistory[colorIndex];
             }
         }
     }
@@ -331,7 +354,7 @@ public class MenuController : MonoBehaviour{
     }
 
     void PaletteColorsUpdated(List<Color> paletteColors) {
-        userSettings.paletteColors = paletteColors.ToArray();
+        projectSettings.paletteColors = paletteColors.ToArray();
         SaveSettings();
     }
 
@@ -345,32 +368,32 @@ public class MenuController : MonoBehaviour{
     }
 
     void OnLatchModeButton() {
-        userSettings.stepMode = !userSettings.stepMode;
-        if (userSettings.stepMode) {
+        projectSettings.stepMode = !projectSettings.stepMode;
+        if (projectSettings.stepMode) {
             latchModeButton.transform.GetChild(0).GetComponent<TMP_Text>().text = "By tile";
         }
         else {
             latchModeButton.transform.GetChild(0).GetComponent<TMP_Text>().text = "By row";
         }
 
-        userSettings.currentStep = textureController.ChangeProgressMode(userSettings.stepMode);
-        currentStepDisplay.text = (userSettings.currentStep + 1).ToString();
+        projectSettings.currentStep = textureController.ChangeProgressMode(projectSettings.stepMode);
+        currentStepDisplay.text = (projectSettings.currentStep + 1).ToString();
         SaveSettings();
     }
 
     void OnStartLatchButton() {
         runLatchPanel.gameObject.SetActive(true);
         latchMode = true;
-        if (userSettings.currentStep > 0) {
-            textureController.ContinueLatch(userSettings.currentStep, userSettings.stepMode);
+        if (projectSettings.currentStep > 0) {
+            textureController.ContinueLatch(projectSettings.currentStep, projectSettings.stepMode);
         }
         else {
-            textureController.StartLatch(userSettings.stepMode);
+            textureController.StartLatch(projectSettings.stepMode);
         }
     }
 
     void OnStopLatchButton() {
-        if(userSettings.currentStep > 0) {
+        if(projectSettings.currentStep > 0) {
             startLatchButton.transform.GetChild(0).GetComponent<TMP_Text>().text = "Continue";
         }
         else {
@@ -383,26 +406,33 @@ public class MenuController : MonoBehaviour{
     }
 
     void OnNextButton() {
-        userSettings.currentStep = textureController.NextLatchStep();
-        currentStepDisplay.text = (userSettings.currentStep + 1).ToString();
+        projectSettings.currentStep = textureController.NextLatchStep();
+        currentStepDisplay.text = (projectSettings.currentStep + 1).ToString();
         SaveSettings();
     }
 
     void OnPrevButton() {
-        userSettings.currentStep = textureController.PrevLatchStep();
-        currentStepDisplay.text = (userSettings.currentStep + 1).ToString();
+        projectSettings.currentStep = textureController.PrevLatchStep();
+        currentStepDisplay.text = (projectSettings.currentStep + 1).ToString();
         SaveSettings();
     }
 
     void OnLatchFinished() {
         startLatchButton.transform.GetChild(0).GetComponent<TMP_Text>().text = "Start";
-        currentStepDisplay.text = (userSettings.currentStep + 1).ToString();
+        currentStepDisplay.text = (projectSettings.currentStep + 1).ToString();
         runLatchPanel.gameObject.SetActive(false);
         latchMode = false;
     }
 
-    void SaveSettings() {
+    void SaveUserSettings() {
         string settingsJson = JsonUtility.ToJson(userSettings);
+        StreamWriter saveFile = File.CreateText(Application.dataPath + "/UserSettings.txt");
+        saveFile.Write(settingsJson);
+        saveFile.Close();
+    }
+
+    void SaveSettings() {
+        string settingsJson = JsonUtility.ToJson(projectSettings);
         StreamWriter saveFile = File.CreateText(Application.dataPath + "/SavedProjects/" + loadedProject + ".txt");
         saveFile.Write(settingsJson);
         saveFile.Close();
@@ -412,6 +442,13 @@ public class MenuController : MonoBehaviour{
 
 [System.Serializable]
 public class UserSettings {
+    public string loadedProject = string.Empty;
+    public Texture2D backgroundImage = null;
+
+}
+
+[System.Serializable]
+public class ProjectSettings {
     public bool stepMode = false; //false = by row, true = by tile
     public int currentStep = 0;
     public Color currentColor = Color.white;

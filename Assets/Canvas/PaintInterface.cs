@@ -16,6 +16,7 @@ public class PaintInterface : MonoBehaviour, IPointerClickHandler, IDragHandler{
 
     public void OnPointerClick(PointerEventData eventData) {
         if (eventData.button == PointerEventData.InputButton.Left) {
+            Debug.Log("Clicked");
             UpdatePixel(eventData);
         }
     }
@@ -30,10 +31,10 @@ public class PaintInterface : MonoBehaviour, IPointerClickHandler, IDragHandler{
     }
 
     void UpdatePixel(PointerEventData eventData) {
-        Vector3 pos = rT.InverseTransformPoint(eventData.position);
+        //Vector3 pos = rT.InverseTransformPoint(eventData.position);
 
-        pos.x = Mathf.Clamp(pos.x, 0, rT.sizeDelta.x - 0.1f);
-        pos.y = Mathf.Clamp(pos.y, 0, rT.sizeDelta.y - 0.1f);
+        //pos.x = Mathf.Clamp(pos.x, 0, rT.sizeDelta.x - 0.1f);
+        //pos.y = Mathf.Clamp(pos.y, 0, rT.sizeDelta.y - 0.1f);
 
         paintedPoint?.Invoke(eventData);
 
