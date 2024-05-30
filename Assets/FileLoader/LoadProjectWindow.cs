@@ -20,6 +20,12 @@ public class LoadProjectWindow : MonoBehaviour{
     GameObject selectedButton;
     string selectedProject = "";
 
+    int topPadding = 5;
+    Vector2 cellSize = new Vector2(100, 130);
+    Vector2 spacing = new Vector2(5, 5);
+    int numColumns = 5;
+    float minContentHeight = 260;
+
     private void Awake() {
         loadProjectButton.onClick.AddListener(OnOpenProjectButton);
         initialLoadProjectButton.onClick.AddListener(OnOpenProjectButton);
@@ -27,6 +33,9 @@ public class LoadProjectWindow : MonoBehaviour{
         cancelLoadProjectButton.onClick.AddListener(OnCancelLoadProject);
         confirmDeleteButton.onClick.AddListener(OnDeleteConfirmed);
         disabledProjectSelectors = new List<GameObject>();
+
+        savedProjectsList.GetComponent<GridLayoutGroup>().cellSize = cellSize;
+        savedProjectsList.GetComponent<GridLayoutGroup>().spacing = spacing;
     }
 
     private void OnEnable() {
@@ -55,22 +64,22 @@ public class LoadProjectWindow : MonoBehaviour{
     void OnOpenProjectButton() {
         loadProjectWindow.gameObject.SetActive(true);
 
-        if (!Directory.Exists(Application.dataPath + "/SavedProjects/")) {
-            Directory.CreateDirectory(Application.dataPath + "/SavedProjects/");
+        if (!Directory.Exists(Application.persistentDataPath + "/SavedProjects/")) {
+            Directory.CreateDirectory(Application.persistentDataPath + "/SavedProjects/");
             return;
         }
 
-        DirectoryInfo projectsFolder = new DirectoryInfo(Application.dataPath + "/SavedProjects/");
+        DirectoryInfo projectsFolder = new DirectoryInfo(Application.persistentDataPath + "/SavedProjects/");
         FileInfo[] files = projectsFolder.GetFiles();
 
         GameObject selection;
-
-        Debug.Log("Finding existing projects");
+        int numFiles = 0;
 
         foreach (FileInfo file in files) {
             if (!file.Name.EndsWith(".png")) {
                 continue;
             }
+            numFiles++;
             if (disabledProjectSelectors.Count > 0) {
                 selection = disabledProjectSelectors[0];
                 selection.SetActive(true);
@@ -86,6 +95,16 @@ public class LoadProjectWindow : MonoBehaviour{
             texture.LoadImage(fileData);
             selection.GetComponent<LoadProjectItem>().SetProjectPreview(texture);
         }
+
+        int numRows = numFiles / numColumns;
+        if(numFiles % numColumns != 0) {
+            numRows++;
+        }
+        float contentHeight = numRows * (cellSize.y + spacing.y) + topPadding;
+        if(contentHeight < minContentHeight) {
+            contentHeight = minContentHeight;
+        }
+        savedProjectsList.GetComponent<RectTransform>().sizeDelta = new Vector2(0, contentHeight);
     }
 
     //called by buttons
@@ -103,7 +122,7 @@ public class LoadProjectWindow : MonoBehaviour{
             Debug.Log("Selected project name empty");
             return;
         }
-        string fullPath = Application.dataPath + "/SavedProjects/" + selectedProject + ".png";
+        string fullPath = Application.persistentDataPath + "/SavedProjects/" + selectedProject + ".png";
         if (!File.Exists(fullPath)) {
             Debug.Log("File not found: " + fullPath);
             return;
@@ -116,7 +135,7 @@ public class LoadProjectWindow : MonoBehaviour{
     }
 
     void OnDeleteConfirmed() {
-        string fullPath = Application.dataPath + "/SavedProjects/" + selectedProject + ".png";
+        string fullPath = Application.persistentDataPath + "/SavedProjects/" + selectedProject + ".png";
         if (!File.Exists(fullPath)) {
             Debug.Log("File not found: " + fullPath);
             return;

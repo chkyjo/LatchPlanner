@@ -7,7 +7,9 @@ public class ColorPicker : MonoBehaviour{
 
     public static Action<Color> colorSelected;
     public static Action<Color> paletteColorSelected;
+    public static Action<Color> backgroundColorSelected;
 
+    [SerializeField] GameObject graphic;
     [SerializeField] RawImage saturationImage;
     [SerializeField] RawImage hueImage;
     [SerializeField] RawImage outputImage;
@@ -45,12 +47,28 @@ public class ColorPicker : MonoBehaviour{
         CreatePickerImage();
         CreateOutputImage();
         UpdateOutputImage();
-        gameObject.SetActive(false);
     }
 
     public void Open(ColorSelectionMode mode) {
+        Color.RGBToHSV(ColorHistoryController.currentColor, out currentHue, out currentSat, out currentBrightness);
+        hueSlider.value = currentHue;
+        UpdateSatTexture();
+        UpdateOutputImage();
         selectionMode = mode;
-        gameObject.SetActive(true);
+        graphic.SetActive(true);
+
+        saturationImage.GetComponent<ColorWindow>().SetCursorPos(currentSat, currentBrightness);
+    }
+
+    public void Open(ColorSelectionMode mode, Color color) {
+        Color.RGBToHSV(color, out currentHue, out currentSat, out currentBrightness);
+        hueSlider.value = currentHue;
+        UpdateSatTexture();
+        UpdateOutputImage();
+        selectionMode = mode;
+        graphic.SetActive(true);
+
+        saturationImage.GetComponent<ColorWindow>().SetCursorPos(currentSat, currentBrightness);
     }
 
     void CreateHueImage() {
@@ -131,12 +149,16 @@ public class ColorPicker : MonoBehaviour{
 
     public void OnConfirmClicked() {
         if(selectionMode == ColorSelectionMode.currentColor) {
+            ColorHistoryController.currentColor = Color.HSVToRGB(currentHue, currentSat, currentBrightness);
             colorSelected?.Invoke(Color.HSVToRGB(currentHue, currentSat, currentBrightness));
         }
         else if(selectionMode == ColorSelectionMode.paletteColor) {
             paletteColorSelected?.Invoke(Color.HSVToRGB(currentHue, currentSat, currentBrightness));
         }
-        gameObject.SetActive(false);
+        else if (selectionMode == ColorSelectionMode.backgroundColor) {
+            backgroundColorSelected?.Invoke(Color.HSVToRGB(currentHue, currentSat, currentBrightness));
+        }
+        graphic.SetActive(false);
     }
 
     public void OnHexInput(string hexVal) {

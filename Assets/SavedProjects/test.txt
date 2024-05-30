@@ -1,1 +1,0 @@
-{"stepMode":false,"currentStep":0,"currentColor":{"r":1.0,"g":1.0,"b":1.0,"a":1.0},"colorHistory":[{"r":1.0,"g":1.0,"b":1.0,"a":1.0}],"paletteColors":[]}

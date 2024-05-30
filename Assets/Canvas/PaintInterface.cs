@@ -16,7 +16,6 @@ public class PaintInterface : MonoBehaviour, IPointerClickHandler, IDragHandler{
 
     public void OnPointerClick(PointerEventData eventData) {
         if (eventData.button == PointerEventData.InputButton.Left) {
-            Debug.Log("Clicked");
             UpdatePixel(eventData);
         }
     }

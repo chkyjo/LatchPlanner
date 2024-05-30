@@ -9,6 +9,7 @@ public class PaletController : MonoBehaviour{
     public static Action<Color> colorSelected;
     public static Action<List<Color>> paletteColorsUpdated;
 
+    [SerializeField] Transform colorsPanel;
     [SerializeField] ColorPicker colorPicker;
 
     [SerializeField] Button addPaletteColorButton;
@@ -24,7 +25,7 @@ public class PaletController : MonoBehaviour{
 
     private void Awake() {
         colors = new List<Color>();
-        selectedColor = transform.GetChild(0).gameObject;
+        selectedColor = colorsPanel.GetChild(0).gameObject;
 
         addPaletteColorButton.onClick.AddListener(OnPaletteColorAddButton);
         removePaletteColorButton.onClick.AddListener(OnDeleteButton);
@@ -49,15 +50,13 @@ public class PaletController : MonoBehaviour{
         colors.Clear();
         colors.Add(color);
 
-        Transform colorButtons = transform.GetChild(0);
-
-        for (int i = 0; i < colorButtons.childCount; i++) {
-            colorButtons.GetChild(i).gameObject.SetActive(false);
+        for (int i = 0; i < colorsPanel.childCount; i++) {
+            colorsPanel.GetChild(i).gameObject.SetActive(false);
         }
 
         selectedColor.transform.GetChild(0).gameObject.SetActive(false); //disable selected icon
 
-        selectedColor = colorButtons.transform.GetChild(0).gameObject;
+        selectedColor = colorsPanel.transform.GetChild(0).gameObject;
         selectedColor.SetActive(true);
         selectedColor.GetComponent<Image>().color = color;
         selectedColor.transform.GetChild(0).gameObject.SetActive(true);
@@ -80,26 +79,26 @@ public class PaletController : MonoBehaviour{
 
     public void SetColors(List<Color> colors) {
         this.colors = colors;
-        Transform colorButtons = transform.GetChild(0);
+
         int numColors = colors.Count;
-        if (numColors > colorButtons.childCount) {
-            numColors = colorButtons.childCount;
+        if (numColors > colorsPanel.childCount) {
+            numColors = colorsPanel.childCount;
         }
 
         for (int i = 0; i < numColors; i++) {
-            colorButtons.GetChild(i).GetComponent<Image>().color = colors[i];
-            colorButtons.GetChild(i).gameObject.SetActive(true);
+            colorsPanel.GetChild(i).GetComponent<Image>().color = colors[i];
+            colorsPanel.GetChild(i).gameObject.SetActive(true);
         }
 
-        if (numColors < colorButtons.childCount) {
-            for (int i = numColors; i < colorButtons.childCount; i++) {
-                colorButtons.GetChild(i).gameObject.SetActive(false);
+        if (numColors < colorsPanel.childCount) {
+            for (int i = numColors; i < colorsPanel.childCount; i++) {
+                colorsPanel.GetChild(i).gameObject.SetActive(false);
             }
         }
 
         selectedColor.transform.GetChild(0).gameObject.SetActive(false); //disable selected icon
 
-        selectedColor = colorButtons.transform.GetChild(0).gameObject;
+        selectedColor = colorsPanel.transform.GetChild(0).gameObject;
         selectedColor.transform.GetChild(0).gameObject.SetActive(true);
     }
 
@@ -114,9 +113,8 @@ public class PaletController : MonoBehaviour{
 
         int index = colors.Count;
 
-        Transform colorButtons = transform.GetChild(0);
-        colorButtons.GetChild(index).gameObject.SetActive(true);
-        colorButtons.GetChild(index).GetComponent<Image>().color = color;
+        colorsPanel.GetChild(index).gameObject.SetActive(true);
+        colorsPanel.GetChild(index).GetComponent<Image>().color = color;
 
         colors.Add(color);
         paletteColorsUpdated?.Invoke(colors);
@@ -125,11 +123,7 @@ public class PaletController : MonoBehaviour{
     //when a color from the color palette is selected
     public void ColorPaletSelected(GameObject button) {
         if (deleting) {
-            colors.RemoveAt(button.transform.GetSiblingIndex());
-            button.transform.GetChild(0).gameObject.SetActive(false); //disable selected icon
-            button.SetActive(false);
-            button.transform.SetAsLastSibling();
-            paletteColorsUpdated?.Invoke(colors);
+            RemoveColor(button.transform);
             return;
         }
 
@@ -145,34 +139,40 @@ public class PaletController : MonoBehaviour{
         ToggleRemoveButtons(deleting);
 
         if(deleting) {
-            removePaletteColorButton.transform.GetChild(0).GetComponent<TMP_Text>().text = "Confirm";
+            removePaletteColorButton.transform.GetChild(0).GetComponent<TMP_Text>().text = "ok";
         }
         else {
-            removePaletteColorButton.transform.GetChild(0).GetComponent<TMP_Text>().text = "Remove";
+            removePaletteColorButton.transform.GetChild(0).GetComponent<TMP_Text>().text = "-";
         }
     }
 
     void ToggleRemoveButtons(bool buttons) {
-        Transform colorButtons = transform.GetChild(0);
-        for (int i = 0; i < colorButtons.childCount; i++) {
-            if (colorButtons.GetChild(i).gameObject.activeSelf) {
-                colorButtons.GetChild(i).GetChild(1).gameObject.SetActive(buttons);
+        for (int i = 0; i < colorsPanel.childCount; i++) {
+            if (colorsPanel.GetChild(i).gameObject.activeSelf) {
+                colorsPanel.GetChild(i).GetChild(1).gameObject.SetActive(buttons);
             }
         }
     }
 
     public void OnRemoveColorButton(GameObject button) {
-        RemoveColor(button.transform.GetSiblingIndex());
+        RemoveColor(button.transform);
     }
 
-    public void RemoveColor(int index) {
+    public void RemoveColor(Transform button) {
+        int index = button.GetSiblingIndex();
         if (colors.Count <= index) {
+            Debug.LogError("Index is greater than or equal to number of colors saved");
             return;
         }
 
+        Debug.Log("Removing palette color");
+
         colors.RemoveAt(index);
 
-        Transform colorButtons = transform.GetChild(0);
-        colorButtons.GetChild(index).gameObject.SetActive(false);
+        button.GetChild(0).gameObject.SetActive(false); //disable selected icon
+        button.GetChild(1).gameObject.SetActive(false); //disable remove button
+        button.gameObject.SetActive(false);
+        button.SetAsLastSibling();
+        paletteColorsUpdated?.Invoke(colors);
     }
 }

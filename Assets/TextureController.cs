@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using TMPro;
+using UnityEditor.Tilemaps;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -14,6 +15,7 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
     Texture2D texture;
     Color currentColor = Color.white;
 
+    float tileSize = 20;
     float maxWidth;
     float maxHeight;
 
@@ -44,6 +46,8 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
     [SerializeField] Button zoomButton;
     [SerializeField] Button zoomOutButton;
     [SerializeField] Button fillToolButton;
+    [SerializeField] Button undoButton;
+    [SerializeField] Button redoButton;
 
     [SerializeField] RectTransform rowHighlighter;
     [SerializeField] RectTransform columnHighlighter;
@@ -64,8 +68,6 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
 
     CanvasMode canvasMode;
 
-    Color unselectedToolColor = new Color(0.7f, 0.7f, 0.7f);
-    Color selectedToolColor = new Color(0.5f, 0.5f, 0.5f);
     Image selectedTool;
     Texture2D currentCursor;
 
@@ -90,7 +92,12 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
         fillToolButton.onClick.AddListener(OnFillToolButton);
         paintButton.onClick.AddListener(OnPaintButton);
 
-        selectedTool = paintButton.transform.parent.GetComponent<Image>();
+        undoButton.onClick.AddListener(Undo);
+        redoButton.onClick.AddListener(Redo);
+
+        selectedTool = paintButton.GetComponent<Image>();
+        selectedTool.color -= new Color(0.2f, 0.2f, 0.2f, 0);
+
         currentCursor = paintCursor;
 
         history = new ActionHistory();
@@ -110,7 +117,7 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
         MenuController.projectLoaded += OnProjectLoaded;
         MenuController.photoUploadConfirmed += OnTextureUpload;
         PaletController.colorSelected += ColorSelected;
-        ColorHistoryController.colorSelected += ColorSelected;
+        ColorHistoryController.currentColorUpdated += ColorSelected;
         PaintInterface.paintedPoint += UpdatePixel;
     }
 
@@ -120,7 +127,7 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
         MenuController.projectLoaded -= OnProjectLoaded;
         MenuController.photoUploadConfirmed -= OnTextureUpload;
         PaletController.colorSelected -= ColorSelected;
-        ColorHistoryController.colorSelected -= ColorSelected;
+        ColorHistoryController.currentColorUpdated -= ColorSelected;
         PaintInterface.paintedPoint -= UpdatePixel;
     }
 
@@ -152,6 +159,9 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
     }
 
     void Undo() {
+        if(history.AtBottom()) {
+            return;
+        }
         HistoryAction action = history.GetCurrentAction();
         foreach(Vector2Int pixel in action.pixels) {
             texture.SetPixel(pixel.x, pixel.y, action.fromColor);
@@ -242,7 +252,7 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
 
     void ColorSelected(Color col) {
         currentColor = col;
-        paintButton.GetComponent<Image>().color = currentColor;
+        //paintButton.GetComponent<Image>().color = currentColor;
     }
 
     public void SetResolution(int width, int height) {
@@ -252,7 +262,7 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
 
     public void SetColor(Color color) {
         currentColor = color;
-        paintButton.GetComponent<Image>().color = currentColor;
+        //paintButton.GetComponent<Image>().color = currentColor;
     }
 
     public void CreateNewGrid(Color color) {
@@ -454,9 +464,11 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
     }
 
     void UpdateGridLines() {
+
         for (int i = 0; i < resolution.x - 1; i++) {
             verticalLines.GetChild(i).gameObject.SetActive(true);
             columnNumbers.GetChild(i).gameObject.SetActive(true);
+            //columnNumbers.GetChild(i).GetComponent<TMP_Text>().fontSize = fontSize;
         }
         for (int i = resolution.x - 1; i < maxColumns; i++) {
             verticalLines.GetChild(i).gameObject.SetActive(false);
@@ -469,6 +481,7 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
         for (int i = 0; i < resolution.y - 1; i++) {
             horizontalLines.GetChild(i).gameObject.SetActive(true);
             rowNumbers.GetChild(i).gameObject.SetActive(true);
+            //rowNumbers.GetChild(i).GetComponent<TMP_Text>().fontSize = fontSize;
         }
         for (int i = resolution.y - 1; i < maxRows; i++) {
             horizontalLines.GetChild(i).gameObject.SetActive(false);
@@ -485,18 +498,8 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
     }
 
     void ResizeCanvas() {
-        if (resolution.x / maxWidth > resolution.y / maxHeight) {
-            float multiplier = maxWidth / resolution.x;
-            float height = multiplier * resolution.y;
-            rT.sizeDelta = new Vector2(maxWidth, height);
-            scrollableArea.GetComponent<RectTransform>().sizeDelta = new Vector2(maxWidth + 50, height + 50);
-        }
-        else {
-            float multiplier = maxHeight / resolution.y;
-            float width = multiplier * resolution.x;
-            rT.sizeDelta = new Vector2(width, maxHeight);
-            scrollableArea.GetComponent<RectTransform>().sizeDelta = new Vector2(width + 50, maxHeight + 50);
-        }
+        rT.sizeDelta = new Vector2(resolution.x * tileSize, resolution.y * tileSize);
+        scrollableArea.GetComponent<RectTransform>().sizeDelta = new Vector2(resolution.x * tileSize + 50, resolution.y * tileSize + 50);
 
     }
 
@@ -505,12 +508,22 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
         horizontalLines.gameObject.SetActive(grid);
     }
 
+    public void OnClearButton() {
+        for (int x = 0; x < resolution.x; x++) {
+            for (int y = 0; y < resolution.y; y++) {
+                texture.SetPixel(x, y, currentColor);
+            }
+        }
+
+        texture.Apply();
+    }
+
     void OnPaintButton() {
+        if(canvasMode == CanvasMode.paintMode) {
+            return;
+        }
         canvasMode = CanvasMode.paintMode;
-        selectedTool.color = unselectedToolColor;
-        selectedTool = paintButton.transform.parent.GetComponent<Image>();
-        //selectedTool = paintButton.GetComponentInParent<Image>();
-        selectedTool.color = selectedToolColor;
+        UpdateSelectedButtonColors(selectedTool, paintButton.GetComponent<Image>());
 
         GetComponent<CanvasScroller>().canvasMode = canvasMode;
         paintInterface.gameObject.SetActive(true);
@@ -520,10 +533,11 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
     }
 
     void OnDragButton() {
+        if (canvasMode == CanvasMode.dragMode) {
+            return;
+        }
         canvasMode = CanvasMode.dragMode;
-        selectedTool.color = unselectedToolColor;
-        selectedTool = dragButton.GetComponent<Image>();
-        selectedTool.color = selectedToolColor;
+        UpdateSelectedButtonColors(selectedTool, dragButton.GetComponent<Image>());
 
         GetComponent<CanvasScroller>().canvasMode = canvasMode;
         paintInterface.gameObject.SetActive(false);
@@ -533,16 +547,23 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
     }
 
     void OnFillToolButton() {
+        if (canvasMode == CanvasMode.fillMode) {
+            return;
+        }
         canvasMode = CanvasMode.fillMode;
-        selectedTool.color = unselectedToolColor;
-        selectedTool = fillToolButton.GetComponent<Image>();
-        selectedTool.color = selectedToolColor;
+        UpdateSelectedButtonColors(selectedTool, fillToolButton.GetComponent<Image>());
 
         GetComponent<CanvasScroller>().canvasMode = canvasMode;
         paintInterface.gameObject.SetActive(true);
         paintInterface.fillMode = true;
         Cursor.SetCursor(fillCursor, Vector2.zero, CursorMode.ForceSoftware);
         currentCursor = fillCursor;
+    }
+
+    void UpdateSelectedButtonColors(Image oldSelection, Image newSelection) {
+        oldSelection.color += new Color(0.2f, 0.2f, 0.2f, 0);
+        selectedTool = newSelection;
+        newSelection.color -= new Color(0.2f, 0.2f, 0.2f, 0);
     }
 
     void OnZoomButton() {
@@ -572,7 +593,6 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
         if (Math.Round(oldColor.r, 2) == Math.Round(currentColor.r, 2)
             && Math.Round(oldColor.g, 2) == Math.Round(currentColor.g, 2)
             && Math.Round(oldColor.b, 2) == Math.Round(currentColor.b, 2)) {
-            Debug.Log(Math.Round(oldColor.r, 2).ToString() + "    " + Math.Round(currentColor.r, 2).ToString());
             return;
         }
 
@@ -859,7 +879,10 @@ public class TextureController : MonoBehaviour, IPointerEnterHandler, IPointerEx
     }
 
     public void StopLatch() {
-        paintInterface.gameObject.SetActive(true);
+        if(canvasMode != CanvasMode.dragMode) {
+            paintInterface.gameObject.SetActive(true);
+        }
+
         rowHighlighter.gameObject.SetActive(false);
         columnHighlighter.gameObject.SetActive(false);
         highlighter.gameObject.SetActive(false);
@@ -898,7 +921,7 @@ public class ActionHistory {
     }
 
     List<HistoryAction> history = new List<HistoryAction>();
-    int currentAction = 0;
+    int currentAction = -1;
 
     public void AddAction(Vector2Int[] pixels, Color fromColor, Color toColor) {
         //if current action is not the last action in history
@@ -909,12 +932,11 @@ public class ActionHistory {
         if(history.Count > 50) {
             history.RemoveAt(0);
         }
-
-        history.Add(new HistoryAction(pixels, fromColor, toColor));
-
-        if(history.Count > 1) {
+        else {
             currentAction++;
         }
+
+        history.Add(new HistoryAction(pixels, fromColor, toColor));
     }
 
     public HistoryAction GetCurrentAction() {
@@ -925,14 +947,16 @@ public class ActionHistory {
         return history[currentAction + 1];
     }
 
+    public bool AtBottom() {
+        return currentAction == -1;
+    }
+
     public bool AtTop() {
         return currentAction == history.Count - 1;
     }
 
     public void Undo() {
-        if(currentAction > 0) {
-            currentAction--;
-        }
+        currentAction--;
     }
 
     public void Redo() {

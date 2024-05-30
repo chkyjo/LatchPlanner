@@ -45,4 +45,11 @@ public class ColorWindow : MonoBehaviour, IDragHandler, IPointerClickHandler{
 
         satBrightnessSelected?.Invoke(xNorm, yNorm);
     }
+
+    public void SetCursorPos(float x, float y) {
+        Debug.Log("Setting cursor to " + x.ToString() + ", " + y.ToString());
+
+        Vector3 pos = new Vector3();
+        cursor.localPosition = new Vector3(x, y);
+    }
 }
